@@ -12,17 +12,24 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Fetch existing data from sheet
 try:
-    data = conn.read(ttl="0")
-    logs_df = pd.DataFrame(data)
-except Exception:
+    logs_df = conn.read(ttl="0")
+    if logs_df is None or logs_df.empty:
+        logs_df = pd.DataFrame(columns=["Type", "Duration", "RPE", "Load"])
+    else:
+        # Clean up empty rows if any
+        logs_df = logs_df.dropna(how="all")
+except Exception as e:
+    st.warning(f"Note on initial sheet load: {e}")
     logs_df = pd.DataFrame(columns=["Type", "Duration", "RPE", "Load"])
 
 # Calculate Load Metrics
 if not logs_df.empty and "Load" in logs_df.columns:
-    total_load = logs_df["Load"].astype(float).sum()
-    acute_load = total_load / max(len(logs_df), 1)
+    try:
+        total_load = pd.to_numeric(logs_df["Load"]).sum()
+        acute_load = total_load / max(len(logs_df), 1)
+    except Exception:
+        acute_load = 0.0
 else:
-    total_load = 0.0
     acute_load = 0.0
 
 chronic_baseline = 350.0
@@ -65,14 +72,21 @@ with st.form("workout_form", clear_on_submit=True):
         calculated_load = duration * effort
         new_row = pd.DataFrame([{
             "Type": workout_type,
-            "Duration": duration,
-            "RPE": effort,
-            "Load": calculated_load
+            "Duration": int(duration),
+            "RPE": int(effort),
+            "Load": int(calculated_load)
         }])
+        
         updated_df = pd.concat([logs_df, new_row], ignore_index=True)
-        conn.update(data=updated_df)
-        st.success("Session saved to cloud database!")
-        st.rerun()
+        
+        try:
+            # Clear cache and write updated dataframe
+            conn.update(data=updated_df)
+            st.cache_data.clear()
+            st.success("Session saved to cloud database!")
+            st.rerun()
+        except Exception as err:
+            st.error(f"Failed to write to Google Sheets: {err}")
 
 st.subheader("Recent Logs")
 st.dataframe(logs_df, use_container_width=True)
