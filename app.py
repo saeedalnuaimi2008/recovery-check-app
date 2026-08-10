@@ -16,10 +16,8 @@ try:
     if logs_df is None or logs_df.empty:
         logs_df = pd.DataFrame(columns=["Type", "Duration", "RPE", "Load"])
     else:
-        # Clean up empty rows if any
         logs_df = logs_df.dropna(how="all")
 except Exception as e:
-    st.warning(f"Note on initial sheet load: {e}")
     logs_df = pd.DataFrame(columns=["Type", "Duration", "RPE", "Load"])
 
 # Calculate Load Metrics
@@ -51,42 +49,39 @@ st.divider()
 # Workout Form
 st.subheader("Log Session")
 
-with st.form("workout_form", clear_on_submit=True):
-    workout_type = st.selectbox(
-        "Session Type",
-        [
-            "High-Impact / Contact Session",
-            "High-Intensity Intervals / Conditioning",
-            "Game / Competition",
-            "Strength & Power Training",
-            "Technical / Skill Work",
-            "Active Recovery / Low Intensity"
-        ]
-    )
-    duration = st.slider("Duration (minutes)", 15, 180, 60, step=15)
-    effort = st.slider("Session Effort (RPE 1-10)", 1, 10, 7)
-    
-    submitted = st.form_submit_button("Update Readiness")
-    
-    if submitted:
-        calculated_load = duration * effort
-        new_row = pd.DataFrame([{
-            "Type": workout_type,
-            "Duration": int(duration),
-            "RPE": int(effort),
-            "Load": int(calculated_load)
-        }])
-        
-        updated_df = pd.concat([logs_df, new_row], ignore_index=True)
-        
-        try:
-            # Clear cache and write updated dataframe
-            conn.update(data=updated_df)
-            st.cache_data.clear()
-            st.success("Session saved to cloud database!")
-            st.rerun()
-        except Exception as err:
-            st.error(f"Failed to write to Google Sheets: {err}")
+workout_type = st.selectbox(
+    "Session Type",
+    [
+        "High-Impact / Contact Session",
+        "High-Intensity Intervals / Conditioning",
+        "Game / Competition",
+        "Strength & Power Training",
+        "Technical / Skill Work",
+        "Active Recovery / Low Intensity"
+    ]
+)
+duration = st.slider("Duration (minutes)", 15, 180, 60, step=15)
+effort = st.slider("Session Effort (RPE 1-10)", 1, 10, 7)
 
+if st.button("Update Readiness"):
+    st.info("Attempting to connect and save to Google Sheets...")
+    calculated_load = duration * effort
+    new_row = pd.DataFrame([{
+        "Type": workout_type,
+        "Duration": int(duration),
+        "RPE": int(effort),
+        "Load": int(calculated_load)
+    }])
+    
+    updated_df = pd.concat([logs_df, new_row], ignore_index=True)
+    
+    try:
+        conn.update(data=updated_df)
+        st.cache_data.clear()
+        st.success("SUCCESS: Session saved to Google Sheet!")
+    except Exception as err:
+        st.error(f"FAILURE: {err}")
+
+st.divider()
 st.subheader("Recent Logs")
 st.dataframe(logs_df, use_container_width=True)
